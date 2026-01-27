@@ -557,7 +557,7 @@ class VoiceCog(commands.Cog):
             
             # Interview complete
             if session.is_active:
-                logger.info("Interview complete, processing...")
+                logger.info(f"Interview complete, processing... (transcript lines: {len(session.transcript_lines)})")
                 
                 # Formal closing
                 closing_message = (
@@ -897,6 +897,8 @@ class VoiceCog(commands.Cog):
 
     async def _complete_interview(self, session: InterviewSession):
         """Process completed interview - analyze and post report."""
+        logger.info(f"_complete_interview called - report_sent: {session.report_sent}, transcript_lines: {len(session.transcript_lines)}")
+        
         # Prevent duplicate reports
         if session.report_sent:
             logger.info("Report already sent for this session, skipping")
@@ -907,6 +909,11 @@ class VoiceCog(commands.Cog):
         
         if not transcript.strip():
             logger.warning("Empty transcript, skipping analysis")
+            return
+        
+        # Minimum transcript check - need at least some content
+        if len(session.transcript_lines) < 3:
+            logger.warning(f"Transcript too short ({len(session.transcript_lines)} lines), skipping analysis")
             return
         
         logger.info(f"Processing transcript ({len(transcript)} chars)")
