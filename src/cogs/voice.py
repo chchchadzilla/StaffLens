@@ -37,6 +37,7 @@ INTERVIEWER_SYSTEM_PROMPT_TEMPLATE = """CRITICAL RULES - READ FIRST:
 2. **NO URLS OR LINKS** - Never include ANY URLs, websites, or web references.
 3. **NO ROLEPLAY ACTIONS** - Never use *asterisk actions* like *clears throat*. Just speak.
 4. **NO GREETINGS** - The applicant has already been greeted. Jump straight into your question.
+5. **NO SYSTEM NOTES** - Never include [SYSTEM:], [NOTE:], [THINKING:], or any bracketed commentary. Your entire response is read aloud.
 
 You are an AI interviewer for a Discord community conducting a voice interview.
 
@@ -784,10 +785,17 @@ class VoiceCog(commands.Cog):
         cleaned = re.sub(r'\*[^*]+\*', '', cleaned)
         # Remove _action_ style markers
         cleaned = re.sub(r'_[^_]+_', '', cleaned)
-        # Remove control markers
+        # Remove control markers and system notes in brackets
         cleaned = cleaned.replace('[INTERVIEW_COMPLETE]', '')
         cleaned = cleaned.replace('[PAUSE]', '')
         cleaned = re.sub(r'\[pause\]', '', cleaned, flags=re.IGNORECASE)
+        # Remove ANY bracketed content (LLM system notes, thinking, etc.)
+        cleaned = re.sub(r'\[SYSTEM:[^\]]*\]', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\[NOTE:[^\]]*\]', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\[INTERNAL:[^\]]*\]', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\[THINKING:[^\]]*\]', '', cleaned, flags=re.IGNORECASE)
+        # Catch-all for any remaining bracketed instructions/notes
+        cleaned = re.sub(r'\[[A-Z][A-Z\s]*:[^\]]*\]', '', cleaned)
         # Clean up extra whitespace
         cleaned = ' '.join(cleaned.split())
         return cleaned.strip()
