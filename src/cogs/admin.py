@@ -135,46 +135,65 @@ class AdminCog(commands.Cog):
 
     @commands.command(name="transcript")
     @commands.has_permissions(manage_guild=True)
-    async def get_transcript(self, ctx: commands.Context, interview_id: int):
+    async def get_transcript(self, ctx: commands.Context, interview_id: str):
         """
         Get full transcript of an interview.
         
         Usage: !transcript <id>
         Requires: Manage Server permission
         """
-        interview = await self.bot.db.get_interview(interview_id)
+        # Strip # prefix if present (e.g., "#11" -> "11")
+        interview_id_clean = interview_id.lstrip("#")
+        try:
+            interview_id_int = int(interview_id_clean)
+        except ValueError:
+            await ctx.send(f"❌ Invalid interview ID: {interview_id}. Please use a number like `!transcript 11`")
+            return
+        
+        interview = await self.bot.db.get_interview(interview_id_int)
 
         if not interview:
-            await ctx.send(f"❌ Interview #{interview_id} not found.")
+            await ctx.send(f"❌ Interview #{interview_id_int} not found.")
             return
 
         transcript = interview.get("transcript", "No transcript available.")
 
         # If transcript is too long, send as file
         if len(transcript) > 1900:
+            # Use BytesIO to create a file-like object
+            import io
+            file_buffer = io.BytesIO(transcript.encode('utf-8'))
             file = discord.File(
-                fp=transcript.encode(),
-                filename=f"transcript_{interview_id}.txt",
+                fp=file_buffer,
+                filename=f"transcript_{interview_id_int}.txt",
             )
-            await ctx.send(f"📄 Transcript for Interview #{interview_id}:", file=file)
+            await ctx.send(f"📄 Transcript for Interview #{interview_id_int}:", file=file)
         else:
             await ctx.send(
-                f"📄 **Transcript for Interview #{interview_id}:**\n```{transcript}```"
+                f"📄 **Transcript for Interview #{interview_id_int}:**\n```{transcript}```"
             )
 
     @commands.command(name="reanalyze")
     @commands.has_permissions(administrator=True)
-    async def reanalyze(self, ctx: commands.Context, interview_id: int):
+    async def reanalyze(self, ctx: commands.Context, interview_id: str):
         """
         Re-run AI analysis on a past interview.
         
         Usage: !reanalyze <id>
         Requires: Administrator permission
         """
-        interview = await self.bot.db.get_interview(interview_id)
+        # Strip # prefix if present
+        interview_id_clean = interview_id.lstrip("#")
+        try:
+            interview_id_int = int(interview_id_clean)
+        except ValueError:
+            await ctx.send(f"❌ Invalid interview ID: {interview_id}. Please use a number like `!reanalyze 11`")
+            return
+        
+        interview = await self.bot.db.get_interview(interview_id_int)
 
         if not interview:
-            await ctx.send(f"❌ Interview #{interview_id} not found.")
+            await ctx.send(f"❌ Interview #{interview_id_int} not found.")
             return
 
         transcript = interview.get("transcript")
@@ -197,7 +216,7 @@ class AdminCog(commands.Cog):
             return
 
         # Update database
-        await self.bot.db.save_analysis(interview_id, analysis)
+        await self.bot.db.save_analysis(interview_id_int, analysis)
 
         # Create a mock applicant object for the embed
         class MockApplicant:
