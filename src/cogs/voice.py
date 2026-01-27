@@ -522,10 +522,17 @@ class VoiceCog(commands.Cog):
                             
                             if llm_response:
                                 # Check if interview is complete
+                                # BUT enforce minimum 5 questions before allowing end
                                 if "[INTERVIEW_COMPLETE]" in llm_response:
                                     llm_response = llm_response.replace("[INTERVIEW_COMPLETE]", "").strip()
-                                    session.interview_complete = True
-                                else:
+                                    if question_number >= 5:
+                                        session.interview_complete = True
+                                        logger.info(f"Interview ending after {question_number} questions")
+                                    else:
+                                        # LLM tried to end early - ignore and continue
+                                        logger.warning(f"LLM tried to end at question {question_number}, forcing continue")
+                                
+                                if not session.interview_complete:
                                     # Announce next question (avoid saying 'next question' which could trigger detection)
                                     question_number += 1
                                     await self._speak_and_display(session, "Great, thanks for that. Here's another one:", add_to_transcript=False)
