@@ -96,9 +96,10 @@ class AnalysisService:
         )
         
         self.openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        # Use Claude 4.5 Sonnet for deeper analysis (separate from interview model)
         self.openrouter_model = os.getenv(
-            "OPENROUTER_MODEL",
-            "google/gemini-3-flash-preview",
+            "ANALYSIS_MODEL",
+            "anthropic/claude-sonnet-4",
         )
         
         if not self.openrouter_key:
