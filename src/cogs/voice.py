@@ -381,8 +381,9 @@ class VoiceCog(commands.Cog):
         self.silence_threshold = 2.0  # 2 seconds of silence before sending to LLM
         self.check_interval = 0.3  # Check audio every 300ms
         
-        # OpenRouter settings
+        # OpenRouter settings - use :nitro suffix for maximum throughput
         self.openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        # Fast models for real-time conversation: claude-3-haiku, gemini-2.0-flash, llama-3.1-8b-instruct
         self.openrouter_model = os.getenv("OPENROUTER_MODEL", "anthropic/claude-3-haiku")
 
     async def handle_voice_update(
@@ -744,8 +745,13 @@ class VoiceCog(commands.Cog):
                             "messages": messages,
                             "max_tokens": 200,  # Keep responses short for speech
                             "temperature": 0.7,
+                            # SPEED OPTIMIZATION: Route to lowest latency provider
+                            "provider": {
+                                "sort": "latency",  # Prioritize fastest response time
+                                "preferred_max_latency": {"p90": 3.0},  # 90% under 3s
+                            },
                         },
-                        timeout=aiohttp.ClientTimeout(total=30),
+                        timeout=aiohttp.ClientTimeout(total=15),  # Reduced from 30s
                     ) as response:
                         if response.status == 520 or response.status >= 500:
                             error = await response.text()
