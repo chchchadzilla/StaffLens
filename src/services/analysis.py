@@ -18,6 +18,13 @@ logger = logging.getLogger("stafflens.analysis")
 # Analysis prompt template - Workplace Psychologist framing
 ANALYSIS_PROMPT = """You are the world's foremost workplace psychologist, renowned for your ability to assess candidates through conversational analysis. You're analyzing a voice interview transcript to determine personality traits and cultural fit.
 
+**CRITICAL - READ FIRST:**
+The transcript contains TWO speakers:
+- Lines starting with [StaffLens]: are the AI INTERVIEWER asking questions - IGNORE THESE for analysis
+- Lines starting with any other name (e.g., [chad]:, [john]:) are the APPLICANT's responses - ONLY ANALYZE THESE
+
+You are assessing the APPLICANT only. Never quote or analyze what [StaffLens] said.
+
 **THE CULTURE:**
 This is a community-driven, growth-oriented entrepreneurial Discord server. We value:
 - Collaborative problem-solving over lone-wolf mentality
@@ -28,7 +35,7 @@ This is a community-driven, growth-oriented entrepreneurial Discord server. We v
 - Resilience under ambiguity
 
 **YOUR ASSESSMENT TASK:**
-Analyze this candidate's interview responses across these dimensions:
+Analyze the APPLICANT's interview responses (NOT the interviewer's questions) across these dimensions:
 
 1. **Communication Clarity** (1-10): How articulate and coherent are their thoughts? Do they structure responses well?
 2. **Confidence & Assertiveness** (1-10): Do they speak with conviction? Are they decisive without being arrogant?
@@ -50,7 +57,7 @@ Analyze this candidate's interview responses across these dimensions:
 We hold a high bar. A candidate should demonstrate genuine enthusiasm, self-awareness, and collaborative instincts. When in doubt, protect the culture.
 
 **OUTPUT FORMAT:**
-Return ONLY valid JSON with this exact structure:
+Return ONLY valid JSON with this exact structure. ALL QUOTES MUST BE FROM THE APPLICANT, NEVER FROM [StaffLens]:
 {{
     "scores": {{
         "communication_clarity": <1-10>,
@@ -64,12 +71,12 @@ Return ONLY valid JSON with this exact structure:
     "concerns": ["concern1", "concern2"],
     "red_flags": ["red_flag1", ...] or [],
     "evidence_quotes": {{
-        "positive": ["direct quote showing strength", "another quote"],
-        "negative": ["quote showing concern", "another if applicable"]
+        "positive": ["direct quote FROM APPLICANT showing strength", "another quote FROM APPLICANT"],
+        "negative": ["quote FROM APPLICANT showing concern", "another if applicable"]
     }},
-    "psychological_profile": "2-3 sentence personality/work style assessment",
-    "culture_alignment": "1-2 sentences on how they'd fit our specific culture",
-    "summary": "2-3 sentence executive summary for hiring manager",
+    "psychological_profile": "2-3 sentence personality/work style assessment of the APPLICANT",
+    "culture_alignment": "1-2 sentences on how the APPLICANT would fit our specific culture",
+    "summary": "2-3 sentence executive summary for hiring manager about the APPLICANT",
     "recommendation": "<STRONG_HIRE|HIRE|LEAN_HIRE|LEAN_NO|NO_HIRE|STRONG_NO>",
     "recommendation_reasoning": "1-2 sentences explaining your recommendation"
 }}"""
