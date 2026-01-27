@@ -361,6 +361,9 @@ class InterviewSession:
         
         # Transcript for final analysis
         self.transcript_lines: list[str] = []
+        
+        # Report tracking
+        self.report_sent = False  # Prevent duplicate reports
 
 
 class VoiceCog(commands.Cog):
@@ -701,9 +704,9 @@ class VoiceCog(commands.Cog):
         
         return combined.getvalue() if combined.tell() > 0 else None
 
-    def _on_recording_done(self, sink, channel_id: int, *args):
-        """Callback when recording stops. Must be a regular function, not async."""
-        # This callback is called from a thread, so we just do nothing here
+    async def _on_recording_done(self, sink, channel_id: int, *args):
+        """Callback when recording stops. Must be async for py-cord."""
+        # This callback is called from py-cord's thread via run_coroutine_threadsafe
         # The actual processing happens in _record_until_silence after we stop recording
         pass
 
