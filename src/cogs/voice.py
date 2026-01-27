@@ -36,6 +36,7 @@ INTERVIEWER_SYSTEM_PROMPT_TEMPLATE = """CRITICAL RULES - READ FIRST:
 1. **KEEP IT SHORT** - Maximum 2 sentences per response. One brief reaction + one question. That's it.
 2. **NO URLS OR LINKS** - Never include ANY URLs, websites, or web references.
 3. **NO ROLEPLAY ACTIONS** - Never use *asterisk actions* like *clears throat*. Just speak.
+4. **NO GREETINGS** - The applicant has already been greeted. Jump straight into your question.
 
 You are an AI interviewer for a Discord community conducting a voice interview.
 
@@ -50,14 +51,16 @@ RESPONSE FORMAT (STRICT):
 - Sentence 1: Brief reaction to what they said (optional)
 - Sentence 2: Your next question
 - THAT'S IT. No more. No paragraphs. No lists. No elaboration.
+- DO NOT say "Hello", "Hi", "Welcome", or any greeting - the applicant was already greeted.
 
 EXAMPLE GOOD RESPONSES:
-- "That's really cool! What got you interested in that?"
+- "What got you interested in joining this community?"
 - "Nice, sounds like you've got solid experience. How do you usually handle disagreements with teammates?"
 - "Got it. What are you hoping to get out of joining this community?"
 
 EXAMPLE BAD RESPONSES (TOO LONG):
 - "That's really interesting! It sounds like you have a lot of experience in that area. I can see how that would be valuable. Let me ask you about..." (TOO MANY SENTENCES)
+- "Hello! Welcome to the interview! So glad to have you here today. Let me start by asking..." (NO GREETINGS - already done)
 
 GUIDELINES:
 - Ask ONE question at a time
@@ -67,7 +70,7 @@ GUIDELINES:
 
 When ready to end, include "[INTERVIEW_COMPLETE]" at the end.
 
-Remember: This is VOICE. Keep it conversational and SHORT."""
+Remember: This is VOICE. Keep it conversational and SHORT. NO GREETINGS."""
 
 
 def load_interview_config() -> str:
@@ -225,6 +228,110 @@ def get_system_prompt() -> str:
     return INTERVIEWER_SYSTEM_PROMPT_TEMPLATE.format(community_context=community_context)
 
 
+# Responses that indicate "yes, I'm done talking"
+AFFIRMATIVE_RESPONSES = {
+    "yeah", "yes", "yup", "yep", "yap", "yuh-huh", "uh-huh", "sure", "mmhmm", "mhm",
+    "bet", "for sure", "cool", "tight", "you got it", "yuppers", "yip", "oh yeah",
+    "hell yeah", "hella", "lets go", "let's go", "lets do it", "let's do it", 
+    "send it", "next", "do it", "hit me", "do it up", "go on then", "bring it on",
+    "bring it", "waiting on you", "affirmative", "absolutely", "of course",
+    "i'm waiting on you", "i've been ready", "i was born ready", "i done been ready",
+    "well go on then", "whatever", "i don't care", "do whatever you want",
+    "whatever's clever", "leggo", "lessgo", "try and stop me", "cha-ching",
+    "ka-ching", "i thought you'd never ask", "do it then", "that's it", "that's all",
+    "i'm done", "i'm finished", "that's everything", "nothing else", "nope that's it",
+    "all good", "good to go", "ready", "go ahead", "proceed", "continue", "move on",
+    "next question", "fire away", "shoot", "go for it", "yessir", "yes sir", "yes ma'am",
+    "yessum", "aye", "aye aye", "roger", "roger that", "copy", "copy that", "10-4",
+    "affirmative", "indeed", "correct", "right", "exactly", "precisely", "certainly",
+    "definitely", "surely", "okay", "ok", "k", "kk", "alright", "aight", "ight",
+}
+
+# Responses that indicate "no, I'm still talking / let me continue"
+NEGATIVE_RESPONSES = {
+    "wait", "hold up", "hold on", "stop", "lemme think", "let me think",
+    "i need to think", "i'm still talking", "let me redo", "let me re-do",
+    "can you start over", "start over", "what the fuck", "wtf", "ah man", "aw man",
+    "mannnn", "let me finish", "i didn't finish", "i didnt finish", "you cut me off",
+    "you stepped on me", "you're stepping on my toes", "you're cutting me off",
+    "you just cut me off", "again", "stop doing that", "don't talk til i'm finished",
+    "i'm not done", "not done yet", "not yet", "hang on", "one sec", "one second",
+    "gimme a sec", "give me a second", "no", "nope", "nah", "naw", "negative",
+    "not quite", "actually", "well actually", "um", "uh", "uhh", "umm", "hmm",
+    "let me", "i want to", "i wanna", "there's more", "also", "and another thing",
+    "one more thing", "but wait", "oh and", "plus", "additionally", "furthermore",
+    "more to say", "not finished", "still got more", "keep going", "i'll keep going",
+    "continuing", "as i was saying", "anyway", "anywho", "so anyway", "back to",
+}
+
+# Trigger phrases that signal "move to next question" (must be followed by silence)
+NEXT_QUESTION_TRIGGERS = {
+    "next question", "next question please", "next", "go to the next question",
+    "ready for the next question", "ready for next question", "next one",
+    "next one please", "that's my answer", "i'm ready", "im ready",
+}
+
+# Reminder message if they go silent for too long without saying "next question"
+SILENCE_REMINDER = "Take your time! When you're finished with your answer, just say 'next question' and I'll move on."
+
+
+def contains_next_question_trigger(text: str) -> bool:
+    """Check if the text ends with a 'next question' trigger phrase."""
+    if not text:
+        return False
+    text_lower = text.lower().strip()
+    # Check if text ends with any trigger phrase
+    for trigger in NEXT_QUESTION_TRIGGERS:
+        if text_lower.endswith(trigger):
+            return True
+        # Also check if trigger is in the last ~50 chars (in case of trailing filler)
+        if len(text_lower) > len(trigger) and trigger in text_lower[-50:]:
+            return True
+    return False
+
+
+def strip_trigger_phrase(text: str) -> str:
+    """Remove the 'next question' trigger phrase from the end of text."""
+    if not text:
+        return text
+    text_clean = text.strip()
+    text_lower = text_clean.lower()
+    for trigger in sorted(NEXT_QUESTION_TRIGGERS, key=len, reverse=True):  # Longest first
+        if text_lower.endswith(trigger):
+            return text_clean[:-len(trigger)].strip()
+    return text_clean
+
+
+def is_affirmative(text: str) -> bool:
+    """Check if the response indicates they're done talking."""
+    if not text:
+        return False
+    text_lower = text.lower().strip()
+    # Check for exact matches
+    if text_lower in AFFIRMATIVE_RESPONSES:
+        return True
+    # Check if any affirmative phrase is in the response
+    for phrase in AFFIRMATIVE_RESPONSES:
+        if phrase in text_lower:
+            return True
+    return False
+
+
+def is_negative(text: str) -> bool:
+    """Check if the response indicates they want to keep talking."""
+    if not text:
+        return False
+    text_lower = text.lower().strip()
+    # Check for exact matches
+    if text_lower in NEGATIVE_RESPONSES:
+        return True
+    # Check if any negative phrase is in the response
+    for phrase in NEGATIVE_RESPONSES:
+        if phrase in text_lower:
+            return True
+    return False
+
+
 class InterviewSession:
     """Represents an active conversational interview session."""
 
@@ -296,8 +403,12 @@ class VoiceCog(commands.Cog):
 
         logger.info(f"Applicant detected: {member.display_name}")
 
-        # Applicant joined
+        # Applicant joined a voice channel
         if after.channel and (not before.channel or before.channel != after.channel):
+            # Check if there's already an active interview in this channel
+            if after.channel.id in self.bot.active_sessions:
+                logger.info(f"Interview already in progress in {after.channel.name}, ignoring {member.display_name}")
+                return
             await self._start_interview(member, after.channel)
 
         # Applicant left
@@ -336,6 +447,8 @@ class VoiceCog(commands.Cog):
 
     async def _run_conversation(self, session: InterviewSession):
         """Run the conversational interview loop."""
+        import random
+        
         try:
             await asyncio.sleep(2)  # Brief pause before starting
             
@@ -345,49 +458,107 @@ class VoiceCog(commands.Cog):
                 {"role": "system", "content": system_prompt}
             ]
             
-            # Get initial greeting from LLM
-            greeting = await self._get_llm_response(session, is_initial=True)
-            if greeting:
-                await self._speak_and_display(session, greeting)
+            # === FORMAL INTRODUCTION ===
+            intro_message = (
+                f"Hello {session.applicant.display_name}! Welcome. "
+                f"This is the first stage of your application interview. "
+                f"I'll be asking you a few questions to get to know you better. "
+                f"Keep in mind, I'm an AI bot, so to make this easier on both of us, "
+                f"at the end of every answer, please say 'next question', and I'll know to move on. "
+                f"Take as long as you need with your answers! "
+                f"If you have any questions after we're done, please direct them to the person who set up this interview."
+            )
+            await self._speak_and_display(session, intro_message)
+            await asyncio.sleep(1.5)
+            
+            # First question - directly ask, no second greeting
+            await self._speak_and_display(session, "Alright, let's begin. First question:", add_to_transcript=False)
+            await asyncio.sleep(0.3)
+            
+            first_question = await self._get_llm_response(session, is_initial=True)
+            if first_question:
+                await self._speak_and_display(session, first_question)
             
             # Main conversation loop
+            accumulated_response = ""  # For accumulating response until "next question"
+            question_number = 1  # Track question count
+            reminder_given = False  # Track if we've reminded them about "next question"
+            
             while session.is_active and not session.interview_complete:
-                # Record until silence is detected
+                # Record until silence is detected (short chunks)
                 user_response = await self._record_until_silence(session)
                 
                 if not session.is_active:
                     break
                 
                 if user_response:
-                    # Add to history and transcript
-                    session.conversation_history.append({
-                        "role": "user",
-                        "content": user_response
-                    })
-                    session.transcript_lines.append(f"[{session.applicant.display_name}]: {user_response}")
+                    # Accumulate the response
+                    if accumulated_response:
+                        accumulated_response += " " + user_response
+                    else:
+                        accumulated_response = user_response
+                    
                     logger.info(f"Applicant said: {user_response[:100]}...")
+                    reminder_given = False  # Reset reminder flag since they spoke
                     
-                    # Get LLM response
-                    llm_response = await self._get_llm_response(session)
-                    
-                    if llm_response:
-                        # Check if interview is complete
-                        if "[INTERVIEW_COMPLETE]" in llm_response:
-                            llm_response = llm_response.replace("[INTERVIEW_COMPLETE]", "").strip()
-                            session.interview_complete = True
+                    # Check if they said "next question" (trigger to move on)
+                    if contains_next_question_trigger(user_response):
+                        logger.info("Detected 'next question' trigger, processing response...")
                         
-                        await self._speak_and_display(session, llm_response)
+                        # Strip the trigger phrase from the response
+                        accumulated_response = strip_trigger_phrase(accumulated_response)
+                        
+                        if accumulated_response:
+                            session.conversation_history.append({
+                                "role": "user",
+                                "content": accumulated_response
+                            })
+                            session.transcript_lines.append(f"[{session.applicant.display_name}]: {accumulated_response}")
+                            
+                            # Get LLM response
+                            llm_response = await self._get_llm_response(session)
+                            
+                            if llm_response:
+                                # Check if interview is complete
+                                if "[INTERVIEW_COMPLETE]" in llm_response:
+                                    llm_response = llm_response.replace("[INTERVIEW_COMPLETE]", "").strip()
+                                    session.interview_complete = True
+                                else:
+                                    # Announce next question for formal feel
+                                    question_number += 1
+                                    await self._speak_and_display(session, "Great. Next question:", add_to_transcript=False)
+                                    await asyncio.sleep(0.3)
+                                
+                                await self._speak_and_display(session, llm_response)
+                            
+                            # Reset accumulator for next question
+                            accumulated_response = ""
+                    # Otherwise, they didn't say "next question" yet - keep listening
+                    # (the loop will continue and record more)
+                    
                 else:
-                    # No response detected, maybe prompt them
-                    if len(session.conversation_history) < 4:
-                        await self._speak_and_display(session, "Take your time! I'm here whenever you're ready to chat.")
+                    # No response detected (silence timeout)
+                    if accumulated_response and not reminder_given:
+                        # They said something but went quiet without saying "next question"
+                        await self._speak_and_display(session, SILENCE_REMINDER, add_to_transcript=False)
+                        reminder_given = True
+                    elif not accumulated_response and len(session.conversation_history) < 4:
+                        # They haven't said anything yet - gentle prompt
+                        await self._speak_and_display(session, "Take your time! I'm here whenever you're ready.", add_to_transcript=False)
             
             # Interview complete
             if session.is_active:
                 logger.info("Interview complete, processing...")
                 
-                # Say goodbye
-                await self._speak_and_display(session, "Thanks so much for chatting with me today! I'll put together a summary for the team. Take care!")
+                # Formal closing
+                closing_message = (
+                    f"That concludes our interview, {session.applicant.display_name}. "
+                    f"Thank you so much for taking the time to speak with me today. "
+                    f"I'll put together a summary for the team to review. "
+                    f"If you have any questions, please reach out to the person who set up this interview. "
+                    f"Take care!"
+                )
+                await self._speak_and_display(session, closing_message)
                 await asyncio.sleep(1)
                 
                 # Generate and post the report
@@ -400,10 +571,19 @@ class VoiceCog(commands.Cog):
         finally:
             await self._cleanup_session(session)
 
-    async def _record_until_silence(self, session: InterviewSession) -> Optional[str]:
-        """Record audio until silence is detected, then transcribe."""
+    async def _record_until_silence(self, session: InterviewSession, short_timeout: bool = False) -> Optional[str]:
+        """Record audio until silence is detected, then transcribe.
+        
+        Args:
+            session: The interview session
+            short_timeout: If True, use shorter timeouts (for confirmation responses)
+        """
         if not session.connection or session.is_speaking:
             return None
+        
+        # Use shorter thresholds for confirmation responses
+        silence_threshold = 2.0 if short_timeout else self.silence_threshold
+        no_response_timeout = 8.0 if short_timeout else 30.0
         
         try:
             # Start recording
@@ -439,17 +619,19 @@ class VoiceCog(commands.Cog):
                         # They were talking but stopped
                         if session.silence_start is None:
                             session.silence_start = time.time()
-                        elif time.time() - session.silence_start >= self.silence_threshold:
+                        elif time.time() - session.silence_start >= silence_threshold:
                             # Silence threshold reached after speaking
-                            logger.info(f"{self.silence_threshold}s silence detected, processing...")
+                            if not short_timeout:
+                                logger.info(f"{silence_threshold}s silence detected, processing...")
                             break
                     else:
                         # Haven't started talking yet - give them time
                         if session.silence_start is None:
                             session.silence_start = time.time()
-                        elif time.time() - session.silence_start >= 30:
-                            # 30 seconds with no response at all
-                            logger.info("No response for 30 seconds")
+                        elif time.time() - session.silence_start >= no_response_timeout:
+                            # Timeout with no response at all
+                            if not short_timeout:
+                                logger.info(f"No response for {no_response_timeout} seconds")
                             break
             
             # Stop recording
@@ -602,8 +784,10 @@ class VoiceCog(commands.Cog):
         cleaned = re.sub(r'\*[^*]+\*', '', cleaned)
         # Remove _action_ style markers
         cleaned = re.sub(r'_[^_]+_', '', cleaned)
-        # Remove [INTERVIEW_COMPLETE] marker
+        # Remove control markers
         cleaned = cleaned.replace('[INTERVIEW_COMPLETE]', '')
+        cleaned = cleaned.replace('[PAUSE]', '')
+        cleaned = re.sub(r'\[pause\]', '', cleaned, flags=re.IGNORECASE)
         # Clean up extra whitespace
         cleaned = ' '.join(cleaned.split())
         return cleaned.strip()
@@ -621,16 +805,23 @@ class VoiceCog(commands.Cog):
         cleaned = cleaned.replace('[INTERVIEW_COMPLETE]', '')
         return cleaned.strip()
 
-    async def _speak_and_display(self, session: InterviewSession, text: str):
-        """Speak the text via TTS and display in text channel for accessibility."""
+    async def _speak_and_display(self, session: InterviewSession, text: str, add_to_transcript: bool = True):
+        """Speak the text via TTS and display in text channel for accessibility.
+        
+        Args:
+            session: The interview session
+            text: Text to speak and display
+            add_to_transcript: If False, don't add to transcript (for confirmation prompts)
+        """
         if not text:
             return
         
         # Clean text for display (remove URLs and control markers)
         display_text = self._clean_for_display(text)
         
-        # Add to transcript
-        session.transcript_lines.append(f"[StaffLens]: {display_text}")
+        # Add to transcript (unless it's a confirmation prompt)
+        if add_to_transcript:
+            session.transcript_lines.append(f"[StaffLens]: {display_text}")
         
         # Display in text channel for accessibility
         if session.text_channel:
