@@ -96,10 +96,10 @@ class AnalysisService:
         )
         
         self.openrouter_key = os.getenv("OPENROUTER_API_KEY")
-        # Use Claude 4.5 Sonnet for deeper analysis
+        # Use Claude Sonnet 4.5 for deeper analysis
         self.openrouter_model = os.getenv(
             "ANALYSIS_MODEL",
-            "anthropic/claude-4.5-sonnet",
+            "anthropic/claude-sonnet-4.5",
         )
         
         if not self.openrouter_key:

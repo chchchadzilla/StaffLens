@@ -383,8 +383,8 @@ class VoiceCog(commands.Cog):
         
         # OpenRouter settings - use :nitro suffix for maximum throughput
         self.openrouter_key = os.getenv("OPENROUTER_API_KEY")
-        # Claude 4.5 Haiku:nitro for fastest real-time conversation
-        self.openrouter_model = os.getenv("OPENROUTER_MODEL", "anthropic/claude-4.5-haiku:nitro")
+        # Claude Haiku 4.5:nitro for fastest real-time conversation
+        self.openrouter_model = os.getenv("OPENROUTER_MODEL", "anthropic/claude-haiku-4.5:nitro")
 
     async def handle_voice_update(
         self,
