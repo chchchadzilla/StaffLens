@@ -111,35 +111,27 @@ class AnalysisService:
         """
         Analyze a transcript and return structured assessment.
         
-        Tries local endpoint first, falls back to OpenRouter API.
+        Uses OpenRouter API for analysis.
         
         Args:
             transcript: Full interview transcript with speaker labels
             
         Returns:
-            Analysis result dict or None if both methods fail
+            Analysis result dict or None if analysis fails
         """
         if not transcript or not transcript.strip():
             logger.warning("Empty transcript provided")
             return None
 
-        # Try local ConversaTrait endpoint first
-        logger.info("Attempting local ConversaTrait analysis...")
-        result = await self._analyze_local(transcript)
-        
-        if result:
-            logger.info("Local analysis successful")
-            return result
-
-        # Fall back to OpenRouter
-        logger.info("Falling back to OpenRouter API...")
+        # Use OpenRouter directly (no local endpoint)
+        logger.info("Analyzing transcript via OpenRouter...")
         result = await self._analyze_openrouter(transcript)
         
         if result:
             logger.info("OpenRouter analysis successful")
             return result
 
-        logger.error("All analysis methods failed")
+        logger.error("Analysis failed")
         return None
 
     async def _analyze_local(self, transcript: str) -> Optional[dict]:

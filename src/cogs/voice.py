@@ -378,7 +378,7 @@ class VoiceCog(commands.Cog):
         self.tts = get_tts_service()
         
         # Silence detection settings
-        self.silence_threshold = 3.0  # 3 seconds of silence before sending to LLM
+        self.silence_threshold = 2.0  # 2 seconds of silence before sending to LLM
         self.check_interval = 0.3  # Check audio every 300ms
         
         # OpenRouter settings
@@ -508,7 +508,7 @@ class VoiceCog(commands.Cog):
                     
                     # Check if they said "next question" (trigger to move on)
                     if contains_next_question_trigger(user_response):
-                        logger.info("Detected 'next question' trigger, processing response...")
+                        logger.info("Detected 'next question' trigger, getting LLM response...")
                         
                         # Strip the trigger phrase from the response
                         accumulated_response = strip_trigger_phrase(accumulated_response)
@@ -520,8 +520,11 @@ class VoiceCog(commands.Cog):
                             })
                             session.transcript_lines.append(f"[{session.applicant.display_name}]: {accumulated_response}")
                             
-                            # Get LLM response
+                            # Get LLM response (with timing)
+                            import time as _time
+                            _start = _time.time()
                             llm_response = await self._get_llm_response(session)
+                            logger.info(f"LLM response took {_time.time() - _start:.1f}s")
                             
                             if llm_response:
                                 # Check if interview is complete
