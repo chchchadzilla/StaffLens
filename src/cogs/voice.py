@@ -67,11 +67,12 @@ GUIDELINES:
 - Ask ONE question at a time
 - React naturally but BRIEFLY
 - If they give short answers, gently probe deeper
-- After 6-8 exchanges, wrap up naturally
+- You MUST ask at least 5-6 questions before wrapping up
+- Only wrap up after substantial conversation (minimum 6 exchanges)
 
-When ready to end, include "[INTERVIEW_COMPLETE]" at the end.
+When ready to end (ONLY after 6+ questions), include "[INTERVIEW_COMPLETE]" at the end.
 
-Remember: This is VOICE. Keep it conversational and SHORT. NO GREETINGS."""
+Remember: This is VOICE. Keep it conversational and SHORT. NO GREETINGS. DO NOT END EARLY."""
 
 
 def load_interview_config() -> str:
@@ -525,9 +526,9 @@ class VoiceCog(commands.Cog):
                                     llm_response = llm_response.replace("[INTERVIEW_COMPLETE]", "").strip()
                                     session.interview_complete = True
                                 else:
-                                    # Announce next question for formal feel
+                                    # Announce next question (avoid saying 'next question' which could trigger detection)
                                     question_number += 1
-                                    await self._speak_and_display(session, "Great. Next question:", add_to_transcript=False)
+                                    await self._speak_and_display(session, "Great, thanks for that. Here's another one:", add_to_transcript=False)
                                     await asyncio.sleep(0.3)
                                 
                                 await self._speak_and_display(session, llm_response)
@@ -889,6 +890,12 @@ class VoiceCog(commands.Cog):
 
     async def _complete_interview(self, session: InterviewSession):
         """Process completed interview - analyze and post report."""
+        # Prevent duplicate reports
+        if session.report_sent:
+            logger.info("Report already sent for this session, skipping")
+            return
+        session.report_sent = True
+        
         transcript = "\n".join(session.transcript_lines)
         
         if not transcript.strip():
