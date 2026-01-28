@@ -230,105 +230,32 @@ def get_system_prompt() -> str:
     return INTERVIEWER_SYSTEM_PROMPT_TEMPLATE.format(community_context=community_context)
 
 
-# Responses that indicate "yes, I'm done talking"
-AFFIRMATIVE_RESPONSES = {
-    "yeah", "yes", "yup", "yep", "yap", "yuh-huh", "uh-huh", "sure", "mmhmm", "mhm",
-    "bet", "for sure", "cool", "tight", "you got it", "yuppers", "yip", "oh yeah",
-    "hell yeah", "hella", "lets go", "let's go", "lets do it", "let's do it", 
-    "send it", "next", "do it", "hit me", "do it up", "go on then", "bring it on",
-    "bring it", "waiting on you", "affirmative", "absolutely", "of course",
-    "i'm waiting on you", "i've been ready", "i was born ready", "i done been ready",
-    "well go on then", "whatever", "i don't care", "do whatever you want",
-    "whatever's clever", "leggo", "lessgo", "try and stop me", "cha-ching",
-    "ka-ching", "i thought you'd never ask", "do it then", "that's it", "that's all",
-    "i'm done", "i'm finished", "that's everything", "nothing else", "nope that's it",
-    "all good", "good to go", "ready", "go ahead", "proceed", "continue", "move on",
-    "next question", "fire away", "shoot", "go for it", "yessir", "yes sir", "yes ma'am",
-    "yessum", "aye", "aye aye", "roger", "roger that", "copy", "copy that", "10-4",
-    "affirmative", "indeed", "correct", "right", "exactly", "precisely", "certainly",
-    "definitely", "surely", "okay", "ok", "k", "kk", "alright", "aight", "ight",
-}
-
-# Responses that indicate "no, I'm still talking / let me continue"
-NEGATIVE_RESPONSES = {
-    "wait", "hold up", "hold on", "stop", "lemme think", "let me think",
-    "i need to think", "i'm still talking", "let me redo", "let me re-do",
-    "can you start over", "start over", "what the fuck", "wtf", "ah man", "aw man",
-    "mannnn", "let me finish", "i didn't finish", "i didnt finish", "you cut me off",
+# Phrases that indicate "I wasn't finished talking" - trigger apology
+CUT_OFF_PHRASES = {
+    "wait", "hold up", "hold on", "i wasn't finished", "i wasnt finished",
+    "let me finish", "i didn't finish", "i didnt finish", "you cut me off",
     "you stepped on me", "you're stepping on my toes", "you're cutting me off",
-    "you just cut me off", "again", "stop doing that", "don't talk til i'm finished",
+    "you just cut me off", "stop doing that", "don't talk til i'm finished",
     "i'm not done", "not done yet", "not yet", "hang on", "one sec", "one second",
-    "gimme a sec", "give me a second", "no", "nope", "nah", "naw", "negative",
-    "not quite", "actually", "well actually", "um", "uh", "uhh", "umm", "hmm",
-    "let me", "i want to", "i wanna", "there's more", "also", "and another thing",
-    "one more thing", "but wait", "oh and", "plus", "additionally", "furthermore",
-    "more to say", "not finished", "still got more", "keep going", "i'll keep going",
-    "continuing", "as i was saying", "anyway", "anywho", "so anyway", "back to",
+    "gimme a sec", "give me a second", "let me", "there's more", "also", 
+    "one more thing", "but wait", "more to say", "not finished", "still got more",
+    "i wasn't done", "i wasnt done", "hey i wasn't", "hey i wasnt",
 }
 
-# Trigger phrases that signal "move to next question" (must be followed by silence)
-NEXT_QUESTION_TRIGGERS = {
-    "next question", "next question please", "next", "go to the next question",
-    "ready for the next question", "ready for next question", "next one",
-    "next one please", "that's my answer", "i'm ready", "im ready",
-}
-
-# Reminder message if they go silent for too long without saying "next question"
-SILENCE_REMINDER = "Take your time! When you're finished with your answer, just say 'next question' and I'll move on."
+# Apology message when we cut them off
+CUT_OFF_APOLOGY = (
+    "Oh, I'm so sorry about that! Please go ahead and finish what you were saying. "
+    "Just keep in mind I'm an AI and I switch to the next question after about 2 seconds of silence, "
+    "so try to keep your pauses shorter than that and it won't happen again."
+)
 
 
-def contains_next_question_trigger(text: str) -> bool:
-    """Check if the text ends with a 'next question' trigger phrase."""
+def was_cut_off(text: str) -> bool:
+    """Check if the user is indicating they were cut off."""
     if not text:
         return False
     text_lower = text.lower().strip()
-    # Check if text ends with any trigger phrase
-    for trigger in NEXT_QUESTION_TRIGGERS:
-        if text_lower.endswith(trigger):
-            return True
-        # Also check if trigger is in the last ~50 chars (in case of trailing filler)
-        if len(text_lower) > len(trigger) and trigger in text_lower[-50:]:
-            return True
-    return False
-
-
-def strip_trigger_phrase(text: str) -> str:
-    """Remove the 'next question' trigger phrase from the end of text."""
-    if not text:
-        return text
-    text_clean = text.strip()
-    text_lower = text_clean.lower()
-    for trigger in sorted(NEXT_QUESTION_TRIGGERS, key=len, reverse=True):  # Longest first
-        if text_lower.endswith(trigger):
-            return text_clean[:-len(trigger)].strip()
-    return text_clean
-
-
-def is_affirmative(text: str) -> bool:
-    """Check if the response indicates they're done talking."""
-    if not text:
-        return False
-    text_lower = text.lower().strip()
-    # Check for exact matches
-    if text_lower in AFFIRMATIVE_RESPONSES:
-        return True
-    # Check if any affirmative phrase is in the response
-    for phrase in AFFIRMATIVE_RESPONSES:
-        if phrase in text_lower:
-            return True
-    return False
-
-
-def is_negative(text: str) -> bool:
-    """Check if the response indicates they want to keep talking."""
-    if not text:
-        return False
-    text_lower = text.lower().strip()
-    # Check for exact matches
-    if text_lower in NEGATIVE_RESPONSES:
-        return True
-    # Check if any negative phrase is in the response
-    for phrase in NEGATIVE_RESPONSES:
+    for phrase in CUT_OFF_PHRASES:
         if phrase in text_lower:
             return True
     return False
@@ -485,80 +412,57 @@ class VoiceCog(commands.Cog):
             if first_question:
                 await self._speak_and_display(session, first_question)
             
-            # Main conversation loop
-            accumulated_response = ""  # For accumulating response until "next question"
+            # Main conversation loop - simple: listen → 2s silence → respond
             question_number = 1  # Track question count
-            reminder_given = False  # Track if we've reminded them about "next question"
             
             while session.is_active and not session.interview_complete:
-                # Record until silence is detected (short chunks)
+                # Record until 2 seconds of silence
                 user_response = await self._record_until_silence(session)
                 
                 if not session.is_active:
                     break
                 
                 if user_response:
-                    # Accumulate the response
-                    if accumulated_response:
-                        accumulated_response += " " + user_response
-                    else:
-                        accumulated_response = user_response
-                    
                     logger.info(f"Applicant said: {user_response[:100]}...")
-                    reminder_given = False  # Reset reminder flag since they spoke
                     
-                    # Check if they said "next question" (trigger to move on)
-                    if contains_next_question_trigger(user_response):
-                        logger.info("Detected 'next question' trigger, getting LLM response...")
-                        
-                        # Strip the trigger phrase from the response
-                        accumulated_response = strip_trigger_phrase(accumulated_response)
-                        
-                        if accumulated_response:
-                            session.conversation_history.append({
-                                "role": "user",
-                                "content": accumulated_response
-                            })
-                            session.transcript_lines.append(f"[{session.applicant.display_name}]: {accumulated_response}")
-                            
-                            # Get LLM response (with timing)
-                            import time as _time
-                            _start = _time.time()
-                            llm_response = await self._get_llm_response(session)
-                            logger.info(f"LLM response took {_time.time() - _start:.1f}s")
-                            
-                            if llm_response:
-                                # Check if interview is complete
-                                # BUT enforce minimum 5 questions before allowing end
-                                if "[INTERVIEW_COMPLETE]" in llm_response:
-                                    llm_response = llm_response.replace("[INTERVIEW_COMPLETE]", "").strip()
-                                    if question_number >= 5:
-                                        session.interview_complete = True
-                                        logger.info(f"Interview ending after {question_number} questions")
-                                    else:
-                                        # LLM tried to end early - ignore and continue
-                                        logger.warning(f"LLM tried to end at question {question_number}, forcing continue")
-                                
-                                if not session.interview_complete:
-                                    # Announce next question (avoid saying 'next question' which could trigger detection)
-                                    question_number += 1
-                                    await self._speak_and_display(session, "Great, thanks for that. Here's another one:", add_to_transcript=False)
-                                    await asyncio.sleep(0.3)
-                                
-                                await self._speak_and_display(session, llm_response)
-                            
-                            # Reset accumulator for next question
-                            accumulated_response = ""
-                    # Otherwise, they didn't say "next question" yet - keep listening
-                    # (the loop will continue and record more)
+                    # Check if they're saying we cut them off
+                    if was_cut_off(user_response):
+                        logger.info("User indicated they were cut off, apologizing...")
+                        await self._speak_and_display(session, CUT_OFF_APOLOGY, add_to_transcript=False)
+                        # Don't add this to conversation history, just let them continue
+                        continue
                     
+                    # Add to conversation history
+                    session.conversation_history.append({
+                        "role": "user",
+                        "content": user_response
+                    })
+                    session.transcript_lines.append(f"[{session.applicant.display_name}]: {user_response}")
+                    
+                    # Get LLM response (with timing)
+                    import time as _time
+                    _start = _time.time()
+                    llm_response = await self._get_llm_response(session)
+                    logger.info(f"LLM response took {_time.time() - _start:.1f}s")
+                    
+                    if llm_response:
+                        # Check if interview is complete
+                        # BUT enforce minimum 5 questions before allowing end
+                        if "[INTERVIEW_COMPLETE]" in llm_response:
+                            llm_response = llm_response.replace("[INTERVIEW_COMPLETE]", "").strip()
+                            if question_number >= 5:
+                                session.interview_complete = True
+                                logger.info(f"Interview ending after {question_number} questions")
+                            else:
+                                # LLM tried to end early - ignore and continue
+                                logger.warning(f"LLM tried to end at question {question_number}, forcing continue")
+                        
+                        question_number += 1
+                        await self._speak_and_display(session, llm_response)
+                
                 else:
-                    # No response detected (silence timeout)
-                    if accumulated_response and not reminder_given:
-                        # They said something but went quiet without saying "next question"
-                        await self._speak_and_display(session, SILENCE_REMINDER, add_to_transcript=False)
-                        reminder_given = True
-                    elif not accumulated_response and len(session.conversation_history) < 4:
+                    # No response detected (long silence with no speech)
+                    if len(session.conversation_history) < 4:
                         # They haven't said anything yet - gentle prompt
                         await self._speak_and_display(session, "Take your time! I'm here whenever you're ready.", add_to_transcript=False)
             
