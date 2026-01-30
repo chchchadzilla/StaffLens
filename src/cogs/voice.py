@@ -230,37 +230,6 @@ def get_system_prompt() -> str:
     return INTERVIEWER_SYSTEM_PROMPT_TEMPLATE.format(community_context=community_context)
 
 
-# Phrases that indicate "I wasn't finished talking" - trigger apology
-CUT_OFF_PHRASES = {
-    "wait", "hold up", "hold on", "i wasn't finished", "i wasnt finished",
-    "let me finish", "i didn't finish", "i didnt finish", "you cut me off",
-    "you stepped on me", "you're stepping on my toes", "you're cutting me off",
-    "you just cut me off", "stop doing that", "don't talk til i'm finished",
-    "i'm not done", "not done yet", "not yet", "hang on", "one sec", "one second",
-    "gimme a sec", "give me a second", "let me", "there's more", "also", 
-    "one more thing", "but wait", "more to say", "not finished", "still got more",
-    "i wasn't done", "i wasnt done", "hey i wasn't", "hey i wasnt",
-}
-
-# Apology message when we cut them off
-CUT_OFF_APOLOGY = (
-    "Oh, I'm so sorry about that! Please go ahead and finish what you were saying. "
-    "Just keep in mind I'm an AI and I switch to the next question after about 2 seconds of silence, "
-    "so try to keep your pauses shorter than that and it won't happen again."
-)
-
-
-def was_cut_off(text: str) -> bool:
-    """Check if the user is indicating they were cut off."""
-    if not text:
-        return False
-    text_lower = text.lower().strip()
-    for phrase in CUT_OFF_PHRASES:
-        if phrase in text_lower:
-            return True
-    return False
-
-
 class InterviewSession:
     """Represents an active conversational interview session."""
 
@@ -306,7 +275,7 @@ class VoiceCog(commands.Cog):
         
         # Silence detection settings
         self.silence_threshold = 2.0  # 2 seconds of silence before sending to LLM
-        self.check_interval = 0.3  # Check audio every 300ms
+        self.check_interval = 0.2  # Check audio every 200ms (faster detection)
         
         # OpenRouter settings - use :nitro suffix for maximum throughput
         self.openrouter_key = os.getenv("OPENROUTER_API_KEY")
@@ -396,13 +365,11 @@ class VoiceCog(commands.Cog):
                 f"Hello {session.applicant.display_name}! Welcome. "
                 f"This is the first stage of your application interview. "
                 f"I'll be asking you a few questions to get to know you better. "
-                f"Keep in mind, I'm an AI bot, so to make this easier on both of us, "
-                f"at the end of every answer, please say 'next question', and I'll know to move on. "
                 f"Take as long as you need with your answers! "
                 f"If you have any questions after we're done, please direct them to the person who set up this interview."
             )
             await self._speak_and_display(session, intro_message)
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(1.0)  # Reduced from 1.5s
             
             # First question - directly ask, no second greeting
             await self._speak_and_display(session, "Alright, let's begin. First question:", add_to_transcript=False)
@@ -424,13 +391,6 @@ class VoiceCog(commands.Cog):
                 
                 if user_response:
                     logger.info(f"Applicant said: {user_response[:100]}...")
-                    
-                    # Check if they're saying we cut them off
-                    if was_cut_off(user_response):
-                        logger.info("User indicated they were cut off, apologizing...")
-                        await self._speak_and_display(session, CUT_OFF_APOLOGY, add_to_transcript=False)
-                        # Don't add this to conversation history, just let them continue
-                        continue
                     
                     # Add to conversation history
                     session.conversation_history.append({
@@ -559,7 +519,7 @@ class VoiceCog(commands.Cog):
                 session.connection.stop_recording()
                 session.is_recording = False
             
-            await asyncio.sleep(0.3)  # Brief pause for data
+            await asyncio.sleep(0.1)  # Brief pause for data (reduced from 0.3)
             
             # Transcribe if we got audio
             if has_received_audio and session.sink:
